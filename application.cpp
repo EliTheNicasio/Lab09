@@ -19,6 +19,79 @@
 using namespace std;
 enum { NONE, AMBIENT, DIFFUSE, SPECULAR, NUM_MODES };
 
+vec3 Interpolate(vec3 a, vec3 b, float u)
+{
+    return a * (1 - u) + b * u;
+}
+
+vec3 Get_Particle_Color(float d)
+{
+    if(d < .1)
+        return vec3(1, 1, 0);
+    else if(d < 1.5)
+        return Interpolate(vec3(1, 1, 0), vec3(1, 0, 0), (d - .1) / 1.4);
+    else if(d < 2)
+	return vec3(1, 0, 0);
+    else if(d < 3)
+        return Interpolate(vec3(1, 0, 0), vec3(.5, .5, .5), (d - 2) / 1);
+    else
+	return vec3(.5, .5, .5);
+}
+struct Particle
+{
+    float mass, d = 0.0;
+    vec3 pos, vel, force, color;
+
+    void Euler_Step(float h)
+    {
+        d += h;
+        vel += (h / mass) * force;
+        pos += h * vel;
+        color = Get_Particle_Color(d);
+    }
+    void Reset_Forces()
+    {
+	force = vec3(0, 0, 0);
+    }
+    void Handle_Collision(float damping, float coeff_resititution)
+    {
+       if(pos[1] < 0)
+       {
+           pos[1] = 0;
+           if(vel[1] < 0)
+           {
+	       vel[1] = -1.0 * coeff_resititution * vel[1];
+               vel[2] = damping * vel[2];
+               vel[1] = damping * vel[1];
+           }
+       }	 
+    }
+};
+
+
+
+vector<Particle> particles;
+
+float random(float k, float l)
+{
+    return k + static_cast <float> (rand()) / ( static_cast <float> (RAND_MAX / (l - k)));
+}
+
+void Add_Particles(int n)
+{
+    for(int i = 0; i < n; i++)
+    {
+        Particle p;
+        p.mass = 1;
+        p.d = 0;
+	p.pos = vec3(random(-.2, .2), .05, random(-.2, .2));
+        p.vel = vec3(10 * p.pos[0], random(1, 10), 10 * p.pos[2]);
+        p.color = vec3(1, 1, 0);
+        
+        particles.push_back(p);
+    }
+}
+
 void draw_grid(int dim);
 void draw_obj(obj *o, const gl_image_texture_map& textures);
 
@@ -108,6 +181,8 @@ void application::init_event()
             }
         }
     }
+
+    Add_Particles(10);
 }
 
 // triggered each time the application needs to redraw
@@ -129,19 +204,34 @@ void application::draw_event()
         //
         // UPDATE THE COLOR OF THE PARTICLE DYNAMICALLY
         //
+        Add_Particles(20);
+        for(auto& p : particles)
+        {
+	    p.Reset_Forces();
+            p.force = p.force + vec3(0, -1.0 * p.mass * 9.81, 0);
+            p.Euler_Step(h);
+            p.Handle_Collision(.5, .5);
+        }
     }
-
     glLineWidth(2.0);
     glEnable(GL_COLOR_MATERIAL);
     glBegin(GL_LINES);
-        //
-        //
-        // DRAW YOUR PARTICLE USING GL_LINES HERE
-        //
-        // glVertex3f(...) endpoint 1
-        // glVertex3f(...) endpoint 2
-        //
-        //
+            //
+            //
+            // DRAW YOUR PARTICLE USING GL_LINES HERE
+            //
+            // glVertex3f(...) endpoint 1
+            // glVertex3f(...) endpoint 2
+            //
+            //
+    for(Particle p : particles)
+    {
+      	    glColor3f(p.color[0], p.color[1], p.color[2]);
+            glVertex3f(p.pos[0], p.pos[1], p.pos[2]);
+            vec3 endPos = p.pos + static_cast <float>(.04) * p.vel;
+            glVertex3f(endPos[0], endPos[1], endPos[2]);
+    }
+
     glEnd();
 
     // draw the volcano
